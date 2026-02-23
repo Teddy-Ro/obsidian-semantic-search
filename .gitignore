@@ -1,0 +1,11 @@
+# NPM
+node_modules/
+package-lock.json
+
+# Local Obsidian files
+vector_cache.json
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,9 @@
+{
+	"id": "obsidian-semantic-search",
+	"name": "Semantic Search",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Локальный семантический поиск по заметкам. Выступает API-провайдером для RAG.",
+	"author": "Teddy_Ro",
+	"isDesktopOnly": false
+}
