@@ -1,6 +1,4 @@
-<img width="1272" height="1260" alt="image" src="https://github.com/user-attachments/assets/6b044013-1870-4112-a1d0-19e0be15163f" /># Obsidian Semantic Search 🧠🔍
-
-  
+ 
 
 A powerful, privacy-first semantic search plugin for Obsidian. It indexes your notes using vector embeddings and allows you to search for concepts, ideas, and meanings—not just exact keywords.
 
