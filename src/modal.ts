@@ -22,7 +22,7 @@ export class SemanticSearchModal extends Modal {
         
         this.queryInput = controls.createEl('input', { 
             type: 'text', 
-            placeholder: 'Enter a meaning or idea (e.g., "how the brain works")...',
+            placeholder: 'Enter a concept or idea (e.g. "how memory works")...',
             attr: { style: 'flex-grow: 1; padding: 10px; font-size: 16px;' }
         });
         
@@ -49,7 +49,7 @@ export class SemanticSearchModal extends Modal {
                 const results = await this.plugin.api.search(query, limit, 0.3);
                 
                 if (results.length === 0) {
-                    this.resultsContainer.createDiv({ text: 'No relevant results found.', attr: { style: 'color: var(--text-muted); text-align: center; margin-top: 20px;' } });
+                    this.resultsContainer.createDiv({ text: 'No relevant notes found.', attr: { style: 'color: var(--text-muted); text-align: center; margin-top: 20px;' } });
                 } else {
                     results.forEach(res => this.renderResult(res));
                 }

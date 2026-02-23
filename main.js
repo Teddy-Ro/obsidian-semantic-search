@@ -42,14 +42,65 @@ var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
+  checkConfigMismatch() {
+    const currentSig = this.plugin.db.generateSignature();
+    const savedSig = this.plugin.db.savedConfigSignature;
+    if (!savedSig)
+      return false;
+    return currentSig !== savedSig;
+  }
+  parseSignature(sig) {
+    if (!sig)
+      return "None (New DB)";
+    const parts = sig.split("|");
+    if (parts.length < 4)
+      return sig;
+    return `Provider: ${parts[0]}, Model: ${parts[1]}, Chunk: ${parts[2]}, Overlap: ${parts[3]}`;
+  }
+  updateWarning() {
+    if (!this.warningEl)
+      return;
+    const isMismatch = this.checkConfigMismatch();
+    if (isMismatch) {
+      this.warningEl.empty();
+      this.warningEl.style.display = "block";
+      const header = this.warningEl.createDiv({ cls: "setting-item-name", text: "\u26A0\uFE0F Configuration Mismatch!", attr: { style: "font-weight: bold; font-size: 1.1em; color: var(--text-on-accent); margin-bottom: 8px;" } });
+      const desc = this.warningEl.createDiv({ attr: { style: "color: var(--text-on-accent); margin-bottom: 10px; font-size: 0.9em;" } });
+      const saved = this.parseSignature(this.plugin.db.savedConfigSignature);
+      const current = this.parseSignature(this.plugin.db.generateSignature());
+      desc.createDiv({ text: `The database was built with different settings than currently selected. Search is disabled until resolved.` });
+      desc.createEl("br");
+      desc.createDiv({ text: `\u{1F4BE} Database (Saved):`, attr: { style: "font-weight: bold; opacity: 0.8;" } });
+      desc.createDiv({ text: saved, attr: { style: "font-family: monospace; margin-bottom: 5px;" } });
+      desc.createDiv({ text: `\u2699\uFE0F Current Settings:`, attr: { style: "font-weight: bold; opacity: 0.8;" } });
+      desc.createDiv({ text: current, attr: { style: "font-family: monospace;" } });
+      const btnContainer = this.warningEl.createDiv({ attr: { style: "margin-top: 15px; display: flex; gap: 10px;" } });
+      new import_obsidian.ButtonComponent(btnContainer).setButtonText("\u{1F504} Re-index Database").setCta().onClick(async () => {
+        this.plugin.db.clearCache();
+        this.plugin.db.startIndexing(this.plugin.statusBarItem);
+        this.updateWarning();
+        new import_obsidian.ButtonComponent(btnContainer).setButtonText("Indexing started...").setDisabled(true);
+      });
+    } else {
+      this.warningEl.style.display = "none";
+    }
+  }
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "\u2699\uFE0F \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 Semantic Search" });
-    new import_obsidian.Setting(containerEl).setName("\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 Embeddings").setDesc("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435, \u043A\u0442\u043E \u0431\u0443\u0434\u0435\u0442 \u0441\u043E\u0437\u0434\u0430\u0432\u0430\u0442\u044C \u0432\u0435\u043A\u0442\u043E\u0440\u0430 \u0434\u043B\u044F \u0432\u0430\u0448\u0438\u0445 \u0437\u0430\u043C\u0435\u0442\u043E\u043A.").addDropdown(
-      (drop) => drop.addOption("ollama", "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u043E (Ollama)").addOption("api", "API (OpenRouter, OpenAI, \u0412\u043C\u0435\u0441\u0442\u0435 \u0438 \u0434\u0440.)").setValue(this.plugin.settings.provider).onChange(async (v) => {
+    containerEl.createEl("h2", { text: "\u2699\uFE0F Semantic Search Settings" });
+    this.warningEl = containerEl.createDiv({
+      cls: "semantic-search-warning",
+      attr: {
+        style: "background-color: var(--background-modifier-error); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;"
+      }
+    });
+    this.updateWarning();
+    new import_obsidian.Setting(containerEl).setName("Embeddings Provider").setDesc("Choose who generates vectors for your notes.").addDropdown(
+      (drop) => drop.addOption("ollama", "Local (Ollama)").addOption("api", "API (OpenRouter, OpenAI, etc.)").setValue(this.plugin.settings.provider).onChange(async (v) => {
         this.plugin.settings.provider = v;
         await this.plugin.saveSettings();
+        this.updateWarning();
         this.display();
       })
     );
@@ -58,12 +109,13 @@ var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.settings.ollamaUrl = v;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian.Setting(containerEl).setName("Ollama Model").setDesc("\u041C\u043E\u0434\u0435\u043B\u044C \u0434\u043B\u044F \u0432\u0435\u043A\u0442\u043E\u0440\u043E\u0432 (\u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u0442\u0441\u044F nomic-embed-text)").addText((t) => t.setValue(this.plugin.settings.ollamaModel).onChange(async (v) => {
+      new import_obsidian.Setting(containerEl).setName("Ollama Model").setDesc("Vector model (e.g., nomic-embed-text)").addText((t) => t.setValue(this.plugin.settings.ollamaModel).onChange(async (v) => {
         this.plugin.settings.ollamaModel = v;
         await this.plugin.saveSettings();
+        this.updateWarning();
       }));
     } else {
-      new import_obsidian.Setting(containerEl).setName("API URL").setDesc("\u041F\u043E\u043B\u043D\u044B\u0439 \u043F\u0443\u0442\u044C \u0434\u043E \u044D\u043D\u0434\u043F\u043E\u0438\u043D\u0442\u0430 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: https://api.openai.com/v1/embeddings)").addText((t) => t.setValue(this.plugin.settings.apiUrl).onChange(async (v) => {
+      new import_obsidian.Setting(containerEl).setName("API URL").addText((t) => t.setValue(this.plugin.settings.apiUrl).onChange(async (v) => {
         this.plugin.settings.apiUrl = v;
         await this.plugin.saveSettings();
       }));
@@ -71,29 +123,40 @@ var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.settings.apiKey = v;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian.Setting(containerEl).setName("API Model").setDesc("\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043C\u043E\u0434\u0435\u043B\u0438 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 text-embedding-3-small)").addText((t) => t.setValue(this.plugin.settings.apiModel).onChange(async (v) => {
+      new import_obsidian.Setting(containerEl).setName("API Model").addText((t) => t.setValue(this.plugin.settings.apiModel).onChange(async (v) => {
         this.plugin.settings.apiModel = v;
         await this.plugin.saveSettings();
+        this.updateWarning();
       }));
     }
-    containerEl.createEl("h3", { text: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0440\u0430\u0437\u0431\u0438\u0432\u043A\u0438 (Chunking)", attr: { style: "margin-top: 20px;" } });
-    new import_obsidian.Setting(containerEl).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u043A\u0443\u0441\u043A\u0430 (Chunk Size)").setDesc("\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432 \u0432 \u043E\u0434\u043D\u043E\u043C \u0430\u0431\u0437\u0430\u0446\u0435 \u0434\u043B\u044F \u043F\u043E\u0438\u0441\u043A\u0430 (500 - 1500)").addText((t) => t.setValue(this.plugin.settings.chunkSize.toString()).onChange(async (v) => {
-      this.plugin.settings.chunkSize = parseInt(v) || 800;
-      await this.plugin.saveSettings();
+    containerEl.createEl("h3", { text: "Chunking Settings", attr: { style: "margin-top: 20px;" } });
+    new import_obsidian.Setting(containerEl).setName("Chunk Size").setDesc("Characters per vector segment.").addText((t) => t.setValue(this.plugin.settings.chunkSize.toString()).onChange(async (v) => {
+      const val = parseInt(v);
+      if (!isNaN(val)) {
+        this.plugin.settings.chunkSize = val;
+        await this.plugin.saveSettings();
+        this.updateWarning();
+      }
     }));
-    new import_obsidian.Setting(containerEl).setName("\u041F\u0435\u0440\u0435\u043A\u0440\u044B\u0442\u0438\u0435 (Overlap)").setDesc("\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432, \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u044F\u0449\u0438\u0445 \u0438\u0437 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0435\u0433\u043E \u043A\u0443\u0441\u043A\u0430 \u0432 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0434\u043B\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0430.").addText((t) => t.setValue(this.plugin.settings.chunkOverlap.toString()).onChange(async (v) => {
-      this.plugin.settings.chunkOverlap = parseInt(v) || 100;
-      await this.plugin.saveSettings();
+    new import_obsidian.Setting(containerEl).setName("Overlap").setDesc("Characters overlap between chunks.").addText((t) => t.setValue(this.plugin.settings.chunkOverlap.toString()).onChange(async (v) => {
+      const val = parseInt(v);
+      if (!isNaN(val)) {
+        this.plugin.settings.chunkOverlap = val;
+        await this.plugin.saveSettings();
+        this.updateWarning();
+      }
     }));
-    containerEl.createEl("h3", { text: "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0431\u0430\u0437\u043E\u0439 \u0434\u0430\u043D\u043D\u044B\u0445", attr: { style: "margin-top: 20px;" } });
-    new import_obsidian.Setting(containerEl).setName("\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u043A\u044D\u0448 \u0432\u0435\u043A\u0442\u043E\u0440\u043E\u0432").setDesc("\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u0441\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u043D\u044B\u0435 \u0432\u0435\u043A\u0442\u043E\u0440\u0430. \u041F\u043E\u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u043E\u043B\u043D\u0430\u044F \u043F\u0435\u0440\u0435\u0438\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u044F.").addButton(
-      (btn) => btn.setButtonText("\u{1F5D1}\uFE0F \u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u043A\u044D\u0448").setWarning().onClick(() => {
+    containerEl.createEl("h3", { text: "Database Management", attr: { style: "margin-top: 20px;" } });
+    new import_obsidian.Setting(containerEl).setName("Clear Vector Cache").setDesc("Deletes all vectors. Full re-indexing required.").addButton(
+      (btn) => btn.setButtonText("\u{1F5D1}\uFE0F Clear Cache").setWarning().onClick(() => {
         this.plugin.db.clearCache();
+        this.updateWarning();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("\u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u043F\u043E\u043B\u043D\u0443\u044E \u0438\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u044E").setDesc("\u0421\u043A\u0430\u043D\u0438\u0440\u0443\u0435\u0442 \u0432\u0441\u0435 \u0444\u0430\u0439\u043B\u044B \u0438 \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u0435\u0442 \u0432\u0435\u043A\u0442\u043E\u0440\u0430 \u0434\u043B\u044F \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043D\u044B\u0445/\u043D\u043E\u0432\u044B\u0445 \u0437\u0430\u043C\u0435\u0442\u043E\u043A.").addButton(
-      (btn) => btn.setButtonText("\u{1F680} \u0418\u043D\u0434\u0435\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0441\u0435\u0439\u0447\u0430\u0441").setCta().onClick(() => {
+    new import_obsidian.Setting(containerEl).setName("Start Full Indexing").addButton(
+      (btn) => btn.setButtonText("\u{1F680} Index Now").setCta().onClick(() => {
         this.plugin.db.startIndexing(this.plugin.statusBarItem);
+        setTimeout(() => this.updateWarning(), 500);
       })
     );
   }
@@ -183,38 +246,69 @@ var VectorDatabase = class {
   constructor(plugin) {
     this.plugin = plugin;
     this.cache = {};
+    this.savedConfigSignature = "";
     this.isIndexingStatus = false;
     this.progress = 0;
-    this.cachePath = `${this.plugin.manifest.dir}/vector_cache.json`;
+    const dir = this.plugin.manifest.dir || ".";
+    this.cachePath = `${dir}/vector_cache.json`;
+  }
+  generateSignature() {
+    const s = this.plugin.settings;
+    if (s.provider === "ollama") {
+      return `ollama|${s.ollamaModel}|${s.chunkSize}|${s.chunkOverlap}`;
+    } else {
+      return `api|${s.apiModel}|${s.chunkSize}|${s.chunkOverlap}`;
+    }
   }
   async loadCache() {
+    var _a;
     try {
       if (await this.plugin.app.vault.adapter.exists(this.cachePath)) {
-        const data = await this.plugin.app.vault.adapter.read(this.cachePath);
-        this.cache = JSON.parse(data);
+        const dataStr = await this.plugin.app.vault.adapter.read(this.cachePath);
+        const data = JSON.parse(dataStr);
+        if (!data.configSignature && !data.files && !data.files) {
+          this.cache = data;
+          this.savedConfigSignature = "";
+        } else {
+          const dbData = data;
+          this.cache = dbData.files || {};
+          this.savedConfigSignature = (_a = dbData.configSignature) != null ? _a : "";
+        }
       } else {
-        await this.plugin.app.vault.adapter.mkdir(this.plugin.manifest.dir).catch(() => {
-        });
+        const dir = this.plugin.manifest.dir;
+        if (dir)
+          await this.plugin.app.vault.adapter.mkdir(dir).catch(() => {
+          });
+        this.savedConfigSignature = this.generateSignature();
       }
     } catch (e) {
-      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438 \u043A\u044D\u0448\u0430", e);
+      console.error("Error loading vector cache:", e);
+      this.cache = {};
+      this.savedConfigSignature = "";
     }
   }
   async saveCache() {
     try {
-      await this.plugin.app.vault.adapter.write(this.cachePath, JSON.stringify(this.cache));
+      const dbData = {
+        configSignature: this.generateSignature(),
+        files: this.cache
+      };
+      await this.plugin.app.vault.adapter.write(this.cachePath, JSON.stringify(dbData));
+      this.savedConfigSignature = dbData.configSignature || "";
     } catch (e) {
-      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043A\u044D\u0448\u0430", e);
+      console.error("Error saving vector cache:", e);
     }
   }
   clearCache() {
     this.cache = {};
+    this.savedConfigSignature = this.generateSignature();
     this.saveCache();
-    new import_obsidian3.Notice("\u041A\u044D\u0448 \u0432\u0435\u043A\u0442\u043E\u0440\u043E\u0432 \u043E\u0447\u0438\u0449\u0435\u043D!");
+    new import_obsidian3.Notice("Vector cache cleared!");
   }
   async startIndexing(statusBarItem) {
     if (this.isIndexingStatus)
       return;
+    this.savedConfigSignature = this.generateSignature();
     this.isIndexingStatus = true;
     this.progress = 0;
     const files = this.plugin.app.vault.getMarkdownFiles();
@@ -234,11 +328,12 @@ var VectorDatabase = class {
     }
     if (toUpdate.length === 0) {
       this.isIndexingStatus = false;
-      statusBarItem.setText("\u{1F50D} \u0412\u0441\u0435 \u0437\u0430\u043C\u0435\u0442\u043A\u0438 \u043F\u0440\u043E\u0438\u043D\u0434\u0435\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D\u044B");
+      await this.saveCache();
+      statusBarItem.setText("\u{1F50D} All notes indexed");
       setTimeout(() => statusBarItem.setText(""), 3e3);
       return;
     }
-    statusBarItem.setText(`\u{1F50D} \u0418\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u044F: 0/${toUpdate.length}...`);
+    statusBarItem.setText(`\u{1F50D} Indexing: 0/${toUpdate.length}...`);
     for (const file of toUpdate) {
       if (!this.isIndexingStatus)
         break;
@@ -254,20 +349,24 @@ var VectorDatabase = class {
         }
         processed++;
         this.progress = Math.round(processed / toUpdate.length * 100);
-        statusBarItem.setText(`\u{1F50D} \u0418\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u044F: ${processed}/${toUpdate.length} (${this.progress}%)`);
+        statusBarItem.setText(`\u{1F50D} Indexing: ${processed}/${toUpdate.length} (${this.progress}%)`);
         if (processed % 10 === 0)
           await this.saveCache();
         await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (e) {
-        console.error(`\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u0438 \u0438\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u0438 ${file.path}:`, e);
+        console.error(`Error indexing ${file.path}:`, e);
       }
     }
     await this.saveCache();
     this.isIndexingStatus = false;
-    statusBarItem.setText("\u2705 \u0418\u043D\u0434\u0435\u043A\u0441\u0430\u0446\u0438\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430");
+    statusBarItem.setText("\u2705 Indexing complete");
     setTimeout(() => statusBarItem.setText(""), 3e3);
   }
   async search(query, limit = 5, threshold = 0.5) {
+    if (this.savedConfigSignature && this.savedConfigSignature !== this.generateSignature()) {
+      console.warn("Semantic Search: Database signature mismatch. Search results may be inaccurate.");
+      return [];
+    }
     const client = new EmbeddingClient(this.plugin.settings);
     const queryVector = (await client.getEmbeddings([query]))[0];
     const results = [];
@@ -294,11 +393,11 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("semantic-search-modal");
-    contentEl.createEl("h2", { text: "\u{1F9E0} \u0421\u0435\u043C\u0430\u043D\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u041F\u043E\u0438\u0441\u043A" });
+    contentEl.createEl("h2", { text: "\u{1F9E0} Semantic Search" });
     const controls = contentEl.createDiv({ cls: "semantic-search-controls", attr: { style: "display: flex; gap: 10px; margin-bottom: 20px;" } });
     this.queryInput = controls.createEl("input", {
       type: "text",
-      placeholder: '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u043C\u044B\u0441\u043B \u0438\u043B\u0438 \u0438\u0434\u0435\u044E (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: "\u043A\u0430\u043A \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442 \u043C\u043E\u0437\u0433")...',
+      placeholder: 'Enter a concept or idea (e.g. "how memory works")...',
       attr: { style: "flex-grow: 1; padding: 10px; font-size: 16px;" }
     });
     this.limitInput = controls.createEl("input", {
@@ -306,27 +405,27 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
       value: "5",
       attr: { min: "1", max: "20", style: "width: 60px; text-align: center;" }
     });
-    const searchBtn = controls.createEl("button", { text: "\u041D\u0430\u0439\u0442\u0438", cls: "mod-cta" });
+    const searchBtn = controls.createEl("button", { text: "Search", cls: "mod-cta" });
     this.resultsContainer = contentEl.createDiv({ cls: "semantic-search-results", attr: { style: "max-height: 400px; overflow-y: auto;" } });
     const performSearch = async () => {
       const query = this.queryInput.value.trim();
       if (!query)
         return;
-      searchBtn.textContent = "\u0418\u0449\u0443...";
+      searchBtn.textContent = "Searching...";
       searchBtn.disabled = true;
       this.resultsContainer.empty();
       try {
         const limit = parseInt(this.limitInput.value) || 5;
         const results = await this.plugin.api.search(query, limit, 0.3);
         if (results.length === 0) {
-          this.resultsContainer.createDiv({ text: "\u041D\u0438\u0447\u0435\u0433\u043E \u0440\u0435\u043B\u0435\u0432\u0430\u043D\u0442\u043D\u043E\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.", attr: { style: "color: var(--text-muted); text-align: center; margin-top: 20px;" } });
+          this.resultsContainer.createDiv({ text: "No relevant notes found.", attr: { style: "color: var(--text-muted); text-align: center; margin-top: 20px;" } });
         } else {
           results.forEach((res) => this.renderResult(res));
         }
       } catch (e) {
-        new import_obsidian4.Notice("\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0438\u0441\u043A\u0430: " + e.message);
+        new import_obsidian4.Notice("Search error: " + e.message);
       } finally {
-        searchBtn.textContent = "\u041D\u0430\u0439\u0442\u0438";
+        searchBtn.textContent = "Search";
         searchBtn.disabled = false;
       }
     };
@@ -392,7 +491,6 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
 var SemanticSearchPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
-    // ТОТ САМЫЙ ПУБЛИЧНЫЙ API ДЛЯ ВАШЕГО ЧАТА!
     this.api = {
       search: async (query, limit, threshold) => await this.db.search(query, limit, threshold),
       isIndexing: () => this.db.isIndexingStatus,
@@ -420,7 +518,7 @@ var SemanticSearchPlugin = class extends import_obsidian5.Plugin {
       name: "Start / Update Indexing",
       callback: () => {
         if (!this.settings.apiKey && this.settings.provider === "api") {
-          new import_obsidian5.Notice("\u041D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D API \u043A\u043B\u044E\u0447 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445!");
+          new import_obsidian5.Notice("API Key missing in settings!");
           return;
         }
         this.db.startIndexing(this.statusBarItem);

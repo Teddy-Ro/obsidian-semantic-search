@@ -30,3 +30,8 @@ export interface FileCache {
     mtime: number;
     chunks: ChunkData[];
 }
+
+export interface VectorDatabaseFile {
+    configSignature?: string; // Optional: marked with ? to prevent TS errors on old files
+    files: Record<string, FileCache>;
+}
