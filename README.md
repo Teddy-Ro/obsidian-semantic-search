@@ -1,12 +1,13 @@
-# Obsidian Semantic Search 🧠🔍
-
-  
+ 
 
 A powerful, privacy-first semantic search plugin for Obsidian. It indexes your notes using vector embeddings and allows you to search for concepts, ideas, and meanings—not just exact keywords.
 
   
 
 Beyond being a great search tool, **it acts as an API Provider** for other plugins, allowing developers to easily add **RAG (Retrieval-Augmented Generation)** to their own AI plugins via Loose Coupling.
+
+
+<img width="1272" height="1260" alt="plugin" src="https://github.com/user-attachments/assets/057f5a41-c549-4676-a660-8bc053452b5f" />
 
 ## Features
 
