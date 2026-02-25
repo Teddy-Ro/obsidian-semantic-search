@@ -19,7 +19,8 @@ export interface SemanticSearchSettings {
     apiModel: string;
     chunkSize: number;
     chunkOverlap: number;
-    searchHistory: string[]; 
+    searchHistory: string[];
+    historyLimit: number; 
 }
 
 export interface ChunkData {

@@ -36,7 +36,8 @@ var DEFAULT_SETTINGS = {
   apiModel: "text-embedding-3-small",
   chunkSize: 800,
   chunkOverlap: 100,
-  searchHistory: []
+  searchHistory: [],
+  historyLimit: 50
 };
 var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -130,6 +131,17 @@ var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
         this.updateWarning();
       }));
     }
+    containerEl.createEl("h3", { text: "Interface", attr: { style: "margin-top: 20px;" } });
+    new import_obsidian.Setting(containerEl).setName("Search History Limit").setDesc("How many past queries to remember (set 0 to disable).").addText((text) => text.setValue(this.plugin.settings.historyLimit.toString()).onChange(async (value) => {
+      const limit = parseInt(value);
+      if (!isNaN(limit) && limit >= 0) {
+        this.plugin.settings.historyLimit = limit;
+        if (this.plugin.settings.searchHistory.length > limit) {
+          this.plugin.settings.searchHistory = this.plugin.settings.searchHistory.slice(-limit);
+        }
+        await this.plugin.saveSettings();
+      }
+    }));
     containerEl.createEl("h3", { text: "Chunking Settings", attr: { style: "margin-top: 20px;" } });
     new import_obsidian.Setting(containerEl).setName("Chunk Size").setDesc("Characters per vector segment.").addText((t) => t.setValue(this.plugin.settings.chunkSize.toString()).onChange(async (v) => {
       const val = parseInt(v);
@@ -386,11 +398,9 @@ var VectorDatabase = class {
 // src/modal.ts
 var import_obsidian4 = require("obsidian");
 var SemanticSearchModal = class extends import_obsidian4.Modal {
-  // То, что пользователь начал писать до нажатия стрелок
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    // Переменные для навигации по истории
     this.historyIndex = 0;
     this.currentDraft = "";
   }
@@ -479,6 +489,9 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
     });
   }
   async saveToHistory(query) {
+    const limit = this.plugin.settings.historyLimit;
+    if (limit === 0)
+      return;
     const history = this.plugin.settings.searchHistory;
     if (history.length > 0 && history[history.length - 1] === query) {
       this.historyIndex = history.length;
@@ -486,8 +499,9 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
       return;
     }
     history.push(query);
-    if (history.length > 50)
+    while (history.length > limit) {
       history.shift();
+    }
     await this.plugin.saveSettings();
     this.historyIndex = history.length;
     this.currentDraft = "";

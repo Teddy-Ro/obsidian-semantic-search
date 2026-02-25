@@ -11,7 +11,8 @@ export const DEFAULT_SETTINGS: SemanticSearchSettings = {
     apiModel: 'text-embedding-3-small',
     chunkSize: 800,
     chunkOverlap: 100,
-    searchHistory: []
+    searchHistory: [],
+    historyLimit: 50
 };
 
 export class SemanticSearchSettingTab extends PluginSettingTab {
@@ -137,6 +138,26 @@ export class SemanticSearchSettingTab extends PluginSettingTab {
                     this.updateWarning();
                 }));
         }
+
+        containerEl.createEl('h3', { text: 'Interface', attr: { style: 'margin-top: 20px;' } });
+
+        new Setting(containerEl)
+            .setName('Search History Limit')
+            .setDesc('How many past queries to remember (set 0 to disable).')
+            .addText(text => text
+                .setValue(this.plugin.settings.historyLimit.toString())
+                .onChange(async (value) => {
+                    const limit = parseInt(value);
+                    if (!isNaN(limit) && limit >= 0) {
+                        this.plugin.settings.historyLimit = limit;
+                        
+                        if (this.plugin.settings.searchHistory.length > limit) {
+                            this.plugin.settings.searchHistory = this.plugin.settings.searchHistory.slice(-limit);
+                        }
+                        
+                        await this.plugin.saveSettings();
+                    }
+            }));
 
         containerEl.createEl('h3', { text: 'Chunking Settings', attr: { style: 'margin-top: 20px;' } });
         

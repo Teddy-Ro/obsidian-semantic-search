@@ -119,6 +119,10 @@ export class SemanticSearchModal extends Modal {
     }
 
     private async saveToHistory(query: string) {
+        const limit = this.plugin.settings.historyLimit;
+        
+        if (limit === 0) return;
+
         const history = this.plugin.settings.searchHistory;
         
         if (history.length > 0 && history[history.length - 1] === query) {
@@ -128,7 +132,10 @@ export class SemanticSearchModal extends Modal {
         }
 
         history.push(query);
-        if (history.length > 50) history.shift();
+        
+        while (history.length > limit) {
+            history.shift();
+        }
         
         await this.plugin.saveSettings();
         
