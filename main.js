@@ -35,7 +35,8 @@ var DEFAULT_SETTINGS = {
   apiKey: "",
   apiModel: "text-embedding-3-small",
   chunkSize: 800,
-  chunkOverlap: 100
+  chunkOverlap: 100,
+  searchHistory: []
 };
 var SemanticSearchSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -385,9 +386,13 @@ var VectorDatabase = class {
 // src/modal.ts
 var import_obsidian4 = require("obsidian");
 var SemanticSearchModal = class extends import_obsidian4.Modal {
+  // То, что пользователь начал писать до нажатия стрелок
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
+    // Переменные для навигации по истории
+    this.historyIndex = 0;
+    this.currentDraft = "";
   }
   onOpen() {
     const { contentEl } = this;
@@ -397,9 +402,13 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
     const controls = contentEl.createDiv({ cls: "semantic-search-controls", attr: { style: "display: flex; gap: 10px; margin-bottom: 20px;" } });
     this.queryInput = controls.createEl("input", {
       type: "text",
-      placeholder: 'Enter a concept or idea (e.g. "how memory works")...',
+      placeholder: "Enter idea... (Use \u2191/\u2193 for history)",
       attr: { style: "flex-grow: 1; padding: 10px; font-size: 16px;" }
     });
+    const history = this.plugin.settings.searchHistory;
+    this.queryInput.value = "";
+    this.historyIndex = history.length;
+    setTimeout(() => this.queryInput.focus(), 50);
     this.limitInput = controls.createEl("input", {
       type: "number",
       value: "5",
@@ -411,6 +420,7 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
       const query = this.queryInput.value.trim();
       if (!query)
         return;
+      await this.saveToHistory(query);
       searchBtn.textContent = "Searching...";
       searchBtn.disabled = true;
       this.resultsContainer.empty();
@@ -427,13 +437,60 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
       } finally {
         searchBtn.textContent = "Search";
         searchBtn.disabled = false;
+        this.queryInput.focus();
       }
     };
     searchBtn.addEventListener("click", performSearch);
     this.queryInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter")
+      const hist = this.plugin.settings.searchHistory;
+      if (e.key === "Enter") {
+        e.preventDefault();
         performSearch();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (this.historyIndex === hist.length) {
+          this.currentDraft = this.queryInput.value;
+        }
+        if (this.historyIndex > 0) {
+          this.historyIndex--;
+          this.queryInput.value = hist[this.historyIndex];
+          setTimeout(() => {
+            this.queryInput.selectionStart = this.queryInput.selectionEnd = this.queryInput.value.length;
+          }, 0);
+        }
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (this.historyIndex < hist.length) {
+          this.historyIndex++;
+          if (this.historyIndex === hist.length) {
+            this.queryInput.value = this.currentDraft;
+          } else {
+            this.queryInput.value = hist[this.historyIndex];
+          }
+          setTimeout(() => {
+            this.queryInput.selectionStart = this.queryInput.selectionEnd = this.queryInput.value.length;
+          }, 0);
+        }
+      }
     });
+    this.queryInput.addEventListener("input", () => {
+      this.historyIndex = this.plugin.settings.searchHistory.length;
+      this.currentDraft = this.queryInput.value;
+    });
+  }
+  async saveToHistory(query) {
+    const history = this.plugin.settings.searchHistory;
+    if (history.length > 0 && history[history.length - 1] === query) {
+      this.historyIndex = history.length;
+      this.currentDraft = "";
+      return;
+    }
+    history.push(query);
+    if (history.length > 50)
+      history.shift();
+    await this.plugin.saveSettings();
+    this.historyIndex = history.length;
+    this.currentDraft = "";
   }
   renderResult(result) {
     const card = this.resultsContainer.createDiv({
@@ -491,6 +548,7 @@ var SemanticSearchModal = class extends import_obsidian4.Modal {
 var SemanticSearchPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
+    this.lastQuery = "";
     this.api = {
       search: async (query, limit, threshold) => await this.db.search(query, limit, threshold),
       isIndexing: () => this.db.isIndexingStatus,

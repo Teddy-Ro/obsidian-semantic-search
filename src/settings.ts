@@ -10,7 +10,8 @@ export const DEFAULT_SETTINGS: SemanticSearchSettings = {
     apiKey: '',
     apiModel: 'text-embedding-3-small',
     chunkSize: 800,
-    chunkOverlap: 100
+    chunkOverlap: 100,
+    searchHistory: []
 };
 
 export class SemanticSearchSettingTab extends PluginSettingTab {
@@ -23,7 +24,7 @@ export class SemanticSearchSettingTab extends PluginSettingTab {
     private checkConfigMismatch(): boolean {
         const currentSig = this.plugin.db.generateSignature();
         const savedSig = this.plugin.db.savedConfigSignature;
-        if (!savedSig) return false; // Treat empty/new db as valid
+        if (!savedSig) return false; 
         return currentSig !== savedSig;
     }
 
@@ -80,7 +81,6 @@ export class SemanticSearchSettingTab extends PluginSettingTab {
 
         containerEl.createEl('h2', { text: '⚙️ Semantic Search Settings' });
 
-        // --- Warning Block ---
         this.warningEl = containerEl.createDiv({ 
             cls: 'semantic-search-warning',
             attr: { 
@@ -89,7 +89,6 @@ export class SemanticSearchSettingTab extends PluginSettingTab {
         });
         
         this.updateWarning();
-        // ---------------------
 
         new Setting(containerEl)
             .setName('Embeddings Provider')

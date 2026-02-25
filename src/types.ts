@@ -19,6 +19,7 @@ export interface SemanticSearchSettings {
     apiModel: string;
     chunkSize: number;
     chunkOverlap: number;
+    searchHistory: string[]; 
 }
 
 export interface ChunkData {
@@ -32,6 +33,6 @@ export interface FileCache {
 }
 
 export interface VectorDatabaseFile {
-    configSignature?: string; // Optional: marked with ? to prevent TS errors on old files
+    configSignature?: string;
     files: Record<string, FileCache>;
 }

@@ -9,6 +9,8 @@ export default class SemanticSearchPlugin extends Plugin {
     db: VectorDatabase;
     statusBarItem: HTMLElement;
 
+    public lastQuery: string = ''; 
+
     public api: SemanticSearchAPI = {
         search: async (query, limit, threshold) => await this.db.search(query, limit, threshold),
         isIndexing: () => this.db.isIndexingStatus,

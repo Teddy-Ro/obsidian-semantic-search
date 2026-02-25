@@ -6,6 +6,9 @@ export class SemanticSearchModal extends Modal {
     private queryInput: HTMLInputElement;
     private limitInput: HTMLInputElement;
     private resultsContainer: HTMLElement;
+    
+    private historyIndex: number = 0; 
+    private currentDraft: string = ''; 
 
     constructor(app: App, private plugin: SemanticSearchPlugin) {
         super(app);
@@ -22,10 +25,18 @@ export class SemanticSearchModal extends Modal {
         
         this.queryInput = controls.createEl('input', { 
             type: 'text', 
-            placeholder: 'Enter a concept or idea (e.g. "how memory works")...',
+            placeholder: 'Enter idea... (Use ↑/↓ for history)',
             attr: { style: 'flex-grow: 1; padding: 10px; font-size: 16px;' }
         });
         
+        const history = this.plugin.settings.searchHistory;
+        
+        this.queryInput.value = '';
+        
+        this.historyIndex = history.length; 
+
+        setTimeout(() => this.queryInput.focus(), 50);
+
         this.limitInput = controls.createEl('input', {
             type: 'number',
             value: '5',
@@ -33,12 +44,13 @@ export class SemanticSearchModal extends Modal {
         });
 
         const searchBtn = controls.createEl('button', { text: 'Search', cls: 'mod-cta' });
-
         this.resultsContainer = contentEl.createDiv({ cls: 'semantic-search-results', attr: { style: 'max-height: 400px; overflow-y: auto;' } });
 
         const performSearch = async () => {
             const query = this.queryInput.value.trim();
             if (!query) return;
+
+            await this.saveToHistory(query);
 
             searchBtn.textContent = 'Searching...';
             searchBtn.disabled = true;
@@ -58,11 +70,70 @@ export class SemanticSearchModal extends Modal {
             } finally {
                 searchBtn.textContent = 'Search';
                 searchBtn.disabled = false;
+                this.queryInput.focus();
             }
         };
 
         searchBtn.addEventListener('click', performSearch);
-        this.queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
+
+        this.queryInput.addEventListener('keydown', (e) => {
+            const hist = this.plugin.settings.searchHistory;
+            
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performSearch();
+            } 
+            else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                
+                if (this.historyIndex === hist.length) {
+                    this.currentDraft = this.queryInput.value;
+                }
+
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    this.queryInput.value = hist[this.historyIndex];
+                    setTimeout(() => { this.queryInput.selectionStart = this.queryInput.selectionEnd = this.queryInput.value.length; }, 0);
+                }
+            } 
+            else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                
+                if (this.historyIndex < hist.length) {
+                    this.historyIndex++;
+                    
+                    if (this.historyIndex === hist.length) {
+                        this.queryInput.value = this.currentDraft;
+                    } else {
+                        this.queryInput.value = hist[this.historyIndex];
+                    }
+                    setTimeout(() => { this.queryInput.selectionStart = this.queryInput.selectionEnd = this.queryInput.value.length; }, 0);
+                }
+            }
+        });
+
+        this.queryInput.addEventListener('input', () => {
+             this.historyIndex = this.plugin.settings.searchHistory.length;
+             this.currentDraft = this.queryInput.value;
+        });
+    }
+
+    private async saveToHistory(query: string) {
+        const history = this.plugin.settings.searchHistory;
+        
+        if (history.length > 0 && history[history.length - 1] === query) {
+            this.historyIndex = history.length;
+            this.currentDraft = '';
+            return;
+        }
+
+        history.push(query);
+        if (history.length > 50) history.shift();
+        
+        await this.plugin.saveSettings();
+        
+        this.historyIndex = history.length;
+        this.currentDraft = '';
     }
 
     private renderResult(result: SemanticSearchResult) {
